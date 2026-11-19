@@ -112,7 +112,8 @@ function card(it) {
   const open = it.status === "pending";
   const where = it.restaurant ? `${titleCase(it.restaurant)} (${titleCase(it.city)})` : "The app";
   const meta = el("div", { class: "meta" }, el("b", { text: `${it.no}.` }), el("span", { text: where }));
-  if (open && !it.first_sent) meta.append(el("span", { class: "tag", text: "NEW" }));
+  if (open && it.revises) meta.append(el("span", { class: "tag", text: "REVISED" }));
+  else if (open && !it.first_sent) meta.append(el("span", { class: "tag", text: "NEW" }));
   if (open && it.first_sent) meta.append(el("span", { class: "tag wait", text: `waiting since ${dateText(it.first_sent)}` }));
   const label = it.recommendation ? REC[it.recommendation][0] : (it.question ? "Question" : OLD_KIND[it.kind] || it.kind);
   const box = el("div", { class: "item" + (open ? "" : " done") }, meta,
@@ -127,6 +128,7 @@ function card(it) {
   if (it.expected_effect) box.append(el("div", { class: "extra" }, el("b", { text: "Expected effect: " }), it.expected_effect));
   if (it.pc_reason) box.append(el("div", { class: "extra" }, el("b", { text: "Why at the PC: " }), it.pc_reason));
   if (it.not_covered) box.append(el("div", { class: "extra" }, el("b", { text: "Not covered here: " }), it.not_covered));
+  if (it.revises && it.your_note) box.append(el("div", { class: "said", text: `Your note: “${it.your_note}”` }));
   if (it.tester_comment) box.append(el("div", { class: "said", text: `Tester: “${it.tester_comment}”` }));
   if (it.details) box.append(el("details", {}, el("summary", { text: "Details" }), el("pre", { text: it.details })));
 
