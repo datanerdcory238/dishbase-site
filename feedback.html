@@ -64,8 +64,10 @@
 const LETTERS = "ABCDEF";
 // D-086 recommendations (older D-084 ones are shown in the same words)
 const REC = { no_change: "No change needed", fix_now: "Fix now", backlog: "Backlog", choice: "Choice",
+              duplicate: "Duplicate: close it out",
               exists: "No change needed", fix_auto: "Fix now", fix_pc: "Backlog", fix_mac: "Backlog" };
 const APPROVE_MEANS = { no_change: "close it, nothing changes", fix_now: "make the fix", backlog: "add it to the backlog",
+                        duplicate: "mark it done; the original notes this report too",
                         exists: "close it, nothing changes", fix_auto: "make the fix", fix_pc: "add it to the backlog",
                         fix_mac: "add it to the backlog" };
 const OLD_KIND = { correction: "Data fix", ignore: "No change needed", code: "Code fix", app: "App change",
@@ -170,7 +172,7 @@ function card(it) {
     if (i !== it.recommended_choice) select.append(el("option", { value: LETTERS[i], text: `Choose ${LETTERS[i]}: ${c}` }));
   });
   const rec = it.recommendation;
-  if (rec !== "no_change" && rec !== "exists") select.append(el("option", { value: "close", text: "Close, no change" }));
+  if (!["no_change", "exists", "duplicate"].includes(rec)) select.append(el("option", { value: "close", text: "Close, no change" }));
   if (!["backlog", "fix_pc", "fix_mac"].includes(rec)) select.append(el("option", { value: "backlog", text: "Backlog" }));
   const show = () => {
     approve.classList.toggle("on", a.choice === "approve");
