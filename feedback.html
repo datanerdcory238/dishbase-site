@@ -21,10 +21,17 @@
     .tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent);
            color: #fff; }
     .tag.wait { background: #8a8a8a; }
-    .rec { font-weight: 800; font-size: 15px; letter-spacing: .02em; margin: 10px 0 2px; color: var(--accent); }
+    .rec { font-weight: 800; font-size: 17px; margin: 2px 0 2px; color: var(--accent); }
+    h3 { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+         margin: 14px 0 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .meta + h3 { border-top: 0; padding-top: 0; margin-top: 10px; }
+    select { width: 100%; font: inherit; font-size: 16px; padding: 10px; border-radius: 10px;
+             border: 2px solid var(--line); background: var(--bg); color: var(--text); margin: 0 0 8px; }
+    select.on { border-color: var(--accent); }
     .summary { margin: 2px 0 8px; }
-    .said { font-size: 15px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px;
-            margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .said { font-size: 16px; border-left: 3px solid var(--line); padding-left: 10px;
+            margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .said.mine { color: var(--muted); font-size: 15px; }
     .extra { font-size: 15px; margin: 4px 0; }
     .extra b { font-weight: 700; }
     .choices { margin: 6px 0; padding: 0; list-style: none; }
@@ -55,19 +62,16 @@
 <script>
 "use strict";
 const LETTERS = "ABCDEF";
-const REC = {
-  no_change: ["No change needed", "Agree = close it, nothing changes"],
-  exists:    ["Already exists", "Agree = close it, nothing changes"],
-  fix_auto:  ["Fix: small, automatic", "Agree = make the small fix"],
-  fix_pc:    ["Fix: at the PC later", "Agree = put it on the list for the PC"],
-  fix_mac:   ["Fix: on the Mac", "Agree = put it on the list for the Mac"],
-  backlog:   ["Backlog", "Agree = park it in the backlog"],
-  choice:    ["Your choice", "Tap the option you want"],
-};
-const OLD_KIND = { correction: "Data fix", ignore: "No change needed", code: "Code fix (at the PC)",
-                   app: "App change (on the Mac)", info: "For your decision" };
-const STATUS = { approved: "Agreed", rejected: "Dropped", backlog: "In the backlog", done: "Done",
-                 redo: "Sent back for redo", superseded: "Replaced by a revised one" };
+// D-086 recommendations (older D-084 ones are shown in the same words)
+const REC = { no_change: "No change needed", fix_now: "Fix now", backlog: "Backlog", choice: "Choice",
+              exists: "No change needed", fix_auto: "Fix now", fix_pc: "Backlog", fix_mac: "Backlog" };
+const APPROVE_MEANS = { no_change: "close it, nothing changes", fix_now: "make the fix", backlog: "add it to the backlog",
+                        exists: "close it, nothing changes", fix_auto: "make the fix", fix_pc: "add it to the backlog",
+                        fix_mac: "add it to the backlog" };
+const OLD_KIND = { correction: "Data fix", ignore: "No change needed", code: "Code fix", app: "App change",
+                   info: "For your decision" };
+const STATUS = { approved: "Approved", rejected: "Closed, no change", backlog: "In the backlog", done: "Done",
+                 redo: "Sent back for discussion", superseded: "Replaced by a revised one" };
 
 const params = new URLSearchParams(location.hash.slice(1));
 const key = params.get("k") || "", host = params.get("s") || "", pub = params.get("p") || "";
@@ -115,10 +119,17 @@ function card(it) {
   if (open && it.revises) meta.append(el("span", { class: "tag", text: "REVISED" }));
   else if (open && !it.first_sent) meta.append(el("span", { class: "tag", text: "NEW" }));
   if (open && it.first_sent) meta.append(el("span", { class: "tag wait", text: `waiting since ${dateText(it.first_sent)}` }));
-  const label = it.recommendation ? REC[it.recommendation][0] : (it.question ? "Question" : OLD_KIND[it.kind] || it.kind);
-  const box = el("div", { class: "item" + (open ? "" : " done") }, meta,
-    el("div", { class: "rec", text: label.toUpperCase() }),
-    el("div", { class: "summary", text: it.question || it.summary }));
+  const box = el("div", { class: "item" + (open ? "" : " done") }, meta);
+
+  // A) User feedback
+  box.append(el("h3", { text: "User feedback" }),
+             el("div", { class: "said", text: it.tester_comment ? `“${it.tester_comment}”` : "(no comment)" }));
+  if (it.revises && it.your_note) box.append(el("div", { class: "said mine", text: `Your note: “${it.your_note}”` }));
+
+  // B) Recommendation
+  const label = REC[it.recommendation] || (it.question ? "Choice" : OLD_KIND[it.kind] || it.kind);
+  box.append(el("h3", { text: "Recommendation" }), el("div", { class: "rec", text: label }),
+             el("div", { class: "summary", text: it.question || it.summary }));
   if (it.question) box.append(el("div", { class: "extra", text: it.summary }));
   if (it.choices) {
     const ul = el("ul", { class: "choices" });
@@ -126,39 +137,51 @@ function card(it) {
     box.append(ul);
   }
   if (it.expected_effect) box.append(el("div", { class: "extra" }, el("b", { text: "Expected effect: " }), it.expected_effect));
-  if (it.pc_reason) box.append(el("div", { class: "extra" }, el("b", { text: "Why at the PC: " }), it.pc_reason));
+  if (it.pc_reason) box.append(el("div", { class: "extra" }, el("b", { text: "Why not now: " }), it.pc_reason));
   if (it.not_covered) box.append(el("div", { class: "extra" }, el("b", { text: "Not covered here: " }), it.not_covered));
-  if (it.revises && it.your_note) box.append(el("div", { class: "said", text: `Your note: “${it.your_note}”` }));
-  if (it.tester_comment) box.append(el("div", { class: "said", text: `Tester: “${it.tester_comment}”` }));
-  if (it.details) box.append(el("details", {}, el("summary", { text: "Details" }), el("pre", { text: it.details })));
 
+  // C) Details
+  box.append(el("h3", { text: "Details" }),
+             it.details ? el("details", {}, el("summary", { text: "Show details" }), el("pre", { text: it.details }))
+                        : el("div", { class: "extra", text: "None." }));
+
+  // D) Action
+  box.append(el("h3", { text: "Action" }));
   if (!open) {
     box.append(el("div", { class: "state", text: STATUS[it.status] || it.status }));
     return box;
   }
   const saved = it.waiting_answer || {};
-  const a = { choice: saved.choice || null, note: saved.note || "" };
+  const savedChoice = { agree: "approve", drop: "close" }[saved.choice] || saved.choice || null;
+  const a = { choice: savedChoice, note: saved.note || "" };
   answers.set(it.proposal_id, a);
-  const options = it.choices
-    ? it.choices.map((_, i) => [LETTERS[i], LETTERS[i]]).concat([["drop", "Drop"], ["backlog", "Backlog"]])
-    : [["agree", "Agree"], ["drop", "Drop"], ["backlog", "Backlog"]];
-  const row = el("div", { class: "buttons" });
-  const buttons = options.map(([value, text]) => {
-    const b = el("button", { type: "button", text });
-    if (a.choice === value) b.classList.add("on");
-    b.addEventListener("click", () => {
-      a.choice = a.choice === value ? null : value;          // tap again to undo
-      buttons.forEach(x => x.classList.toggle("on", x === b && a.choice === value));
-      updateSend();
-    });
-    row.append(b);
-    return b;
+
+  const approve = el("button", { type: "button", text: "Approve" });
+  const select = el("select", { "aria-label": "Change action" });
+  select.append(el("option", { value: "", text: "Change action…" }));
+  (it.choices || []).forEach((c, i) => {
+    if (i !== it.recommended_choice) select.append(el("option", { value: LETTERS[i], text: `Choose ${LETTERS[i]}: ${c}` }));
   });
-  const hint = (it.recommendation && REC[it.recommendation][1]) || (it.choices ? "Tap the option you want" : "Agree = do what it says");
-  const note = el("textarea", { placeholder: "Note (optional) — a note sends it back to be redone with your direction", rows: "2" });
+  const rec = it.recommendation;
+  if (rec !== "no_change" && rec !== "exists") select.append(el("option", { value: "close", text: "Close, no change" }));
+  if (!["backlog", "fix_pc", "fix_mac"].includes(rec)) select.append(el("option", { value: "backlog", text: "Backlog" }));
+  const show = () => {
+    approve.classList.toggle("on", a.choice === "approve");
+    select.value = a.choice && a.choice !== "approve" ? a.choice : "";
+    select.classList.toggle("on", !!select.value);
+  };
+  approve.addEventListener("click", () => { a.choice = a.choice === "approve" ? null : "approve"; show(); updateSend(); });
+  select.addEventListener("change", () => { a.choice = select.value || null; show(); updateSend(); });
+  show();
+
+  const means = it.choices ? `Approve = ${LETTERS[it.recommended_choice] ?? "the recommended option"}`
+                           : `Approve = ${APPROVE_MEANS[rec] || "do what it says"}`;
+  const note = el("textarea", { placeholder: "Note (optional)", rows: "2" });
   note.value = a.note;
   note.addEventListener("input", () => { a.note = note.value; updateSend(); });
-  box.append(row, el("div", { class: "hint", text: `${hint} · Drop = close it, change nothing · Backlog = park it` }), note);
+  box.append(el("div", { class: "buttons" }, approve), select,
+             el("div", { class: "hint", text: means }), note,
+             el("div", { class: "hint", text: "A note alone sends it back for discussion; a note with Approve or a change is saved as your reason." }));
   if (saved.choice || saved.note) box.append(el("div", { class: "state", text: "Saved — applied within 30 minutes" }));
   return box;
 }
@@ -196,8 +219,8 @@ document.getElementById("send").addEventListener("click", async () => {
     const skipped = (r.skipped || []).length;
     document.getElementById("list").prepend(el("div", { class: "msg",
       text: `Saved ${r.saved} answer${r.saved === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped: already answered)` : ""}. ` +
-            "They're applied within 30 minutes and you'll get an email with what happened. " +
-            "Anything you skipped comes again tomorrow." }));
+            "They're applied within 30 minutes and you'll get an email with what happened; items you sent back " +
+            "for discussion come back revised (7 AM–10 PM: within about an hour). Anything you skipped comes again tomorrow." }));
     window.scrollTo(0, 0);
   } catch (e) {
     b.disabled = false; updateSend();
