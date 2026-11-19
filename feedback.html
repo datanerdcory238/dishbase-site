@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Feedback answers · Dishbase</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Answer page for the daily feedback email (decision D-084). Works only with the link from that email. */
+    :root { --ok: #2e7d32; --line: rgba(127,127,127,.25); }
+    @media (prefers-color-scheme: dark) { :root { --ok: #66bb6a; } }
+    main { padding-top: 20px; }
+    .top { position: sticky; top: 0; background: var(--bg); padding: 8px 0 10px; z-index: 2;
+           border-bottom: 1px solid var(--line); }
+    .top h1 { margin: 0; font-size: 22px; }
+    .item { background: var(--card); border-radius: 14px; padding: 14px 16px; margin: 14px 0; }
+    .item.done { opacity: .55; }
+    .meta { font-size: 14px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent);
+           color: #fff; }
+    .tag.wait { background: #8a8a8a; }
+    .rec { font-weight: 800; font-size: 15px; letter-spacing: .02em; margin: 10px 0 2px; color: var(--accent); }
+    .summary { margin: 2px 0 8px; }
+    .said { font-size: 15px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px;
+            margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .extra { font-size: 15px; margin: 4px 0; }
+    .extra b { font-weight: 700; }
+    .choices { margin: 6px 0; padding: 0; list-style: none; }
+    .choices li { margin: 3px 0; }
+    details { margin: 8px 0; font-size: 14px; }
+    details pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+                  margin: 6px 0 0; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+    .buttons button { flex: 1 1 auto; min-width: 72px; padding: 11px 12px; font: inherit; font-weight: 700;
+                      border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--text); }
+    .buttons button.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .hint { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    textarea { width: 100%; min-height: 44px; font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px;
+               border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+    .state { font-size: 14px; font-weight: 700; color: var(--ok); margin-top: 6px; }
+    .send { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0 16px; border-top: 1px solid var(--line); }
+    .send button { width: 100%; padding: 14px; font: inherit; font-size: 18px; font-weight: 800; border: 0;
+                   border-radius: 12px; background: var(--accent); color: #fff; }
+    .send button:disabled { opacity: .45; }
+    .msg { background: var(--card); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+  </style>
+</head>
+<body><main>
+  <div class="top"><h1>Dishbase feedback</h1><div class="meta" id="subtitle">Loading…</div></div>
+  <div id="list"></div>
+  <div class="send" id="sendbar" hidden><button id="send" disabled>Send answers</button></div>
+</main>
+<script>
+"use strict";
+const LETTERS = "ABCDEF";
+const REC = {
+  no_change: ["No change needed", "Agree = close it, nothing changes"],
+  exists:    ["Already exists", "Agree = close it, nothing changes"],
+  fix_auto:  ["Fix: small, automatic", "Agree = make the small fix"],
+  fix_pc:    ["Fix: at the PC later", "Agree = put it on the list for the PC"],
+  fix_mac:   ["Fix: on the Mac", "Agree = put it on the list for the Mac"],
+  backlog:   ["Backlog", "Agree = park it in the backlog"],
+  choice:    ["Your choice", "Tap the option you want"],
+};
+const OLD_KIND = { correction: "Data fix", ignore: "No change needed", code: "Code fix (at the PC)",
+                   app: "App change (on the Mac)", info: "For your decision" };
+const STATUS = { approved: "Agreed", rejected: "Dropped", backlog: "In the backlog", done: "Done",
+                 redo: "Sent back for redo", superseded: "Replaced by a revised one" };
+
+const params = new URLSearchParams(location.hash.slice(1));
+const key = params.get("k") || "", host = params.get("s") || "", pub = params.get("p") || "";
+const answers = new Map();          // proposal_id -> {choice, note}
+
+function el(tag, attrs, ...kids) {  // every text goes in as text, never as HTML
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k) e.append(k);
+  return e;
+}
+function show(msg) {
+  document.getElementById("list").replaceChildren(el("div", { class: "msg", text: msg }));
+  document.getElementById("subtitle").textContent = "";
+  document.getElementById("sendbar").hidden = true;
+}
+async function rpc(name, body) {
+  const r = await fetch(`https://${host}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: { "apikey": pub, "Authorization": `Bearer ${pub}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+function titleCase(s) { return (s || "").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()); }
+function dateText(d) {
+  if (!d) return "";
+  const x = new Date(d + "T12:00:00");
+  return x.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+function updateSend() {
+  const n = [...answers.values()].filter(a => a.choice || a.note).length;
+  const b = document.getElementById("send");
+  b.disabled = n === 0;
+  b.textContent = n ? `Send ${n} answer${n === 1 ? "" : "s"}` : "Send answers";
+}
+
+function card(it) {
+  const open = it.status === "pending";
+  const where = it.restaurant ? `${titleCase(it.restaurant)} (${titleCase(it.city)})` : "The app";
+  const meta = el("div", { class: "meta" }, el("b", { text: `${it.no}.` }), el("span", { text: where }));
+  if (open && !it.first_sent) meta.append(el("span", { class: "tag", text: "NEW" }));
+  if (open && it.first_sent) meta.append(el("span", { class: "tag wait", text: `waiting since ${dateText(it.first_sent)}` }));
+  const label = it.recommendation ? REC[it.recommendation][0] : (it.question ? "Question" : OLD_KIND[it.kind] || it.kind);
+  const box = el("div", { class: "item" + (open ? "" : " done") }, meta,
+    el("div", { class: "rec", text: label.toUpperCase() }),
+    el("div", { class: "summary", text: it.question || it.summary }));
+  if (it.question) box.append(el("div", { class: "extra", text: it.summary }));
+  if (it.choices) {
+    const ul = el("ul", { class: "choices" });
+    it.choices.forEach((c, i) => ul.append(el("li", { text: `${LETTERS[i]}) ${c}${i === it.recommended_choice ? "  ★ recommended" : ""}` })));
+    box.append(ul);
+  }
+  if (it.expected_effect) box.append(el("div", { class: "extra" }, el("b", { text: "Expected effect: " }), it.expected_effect));
+  if (it.pc_reason) box.append(el("div", { class: "extra" }, el("b", { text: "Why at the PC: " }), it.pc_reason));
+  if (it.not_covered) box.append(el("div", { class: "extra" }, el("b", { text: "Not covered here: " }), it.not_covered));
+  if (it.tester_comment) box.append(el("div", { class: "said", text: `Tester: “${it.tester_comment}”` }));
+  if (it.details) box.append(el("details", {}, el("summary", { text: "Details" }), el("pre", { text: it.details })));
+
+  if (!open) {
+    box.append(el("div", { class: "state", text: STATUS[it.status] || it.status }));
+    return box;
+  }
+  const saved = it.waiting_answer || {};
+  const a = { choice: saved.choice || null, note: saved.note || "" };
+  answers.set(it.proposal_id, a);
+  const options = it.choices
+    ? it.choices.map((_, i) => [LETTERS[i], LETTERS[i]]).concat([["drop", "Drop"], ["backlog", "Backlog"]])
+    : [["agree", "Agree"], ["drop", "Drop"], ["backlog", "Backlog"]];
+  const row = el("div", { class: "buttons" });
+  const buttons = options.map(([value, text]) => {
+    const b = el("button", { type: "button", text });
+    if (a.choice === value) b.classList.add("on");
+    b.addEventListener("click", () => {
+      a.choice = a.choice === value ? null : value;          // tap again to undo
+      buttons.forEach(x => x.classList.toggle("on", x === b && a.choice === value));
+      updateSend();
+    });
+    row.append(b);
+    return b;
+  });
+  const hint = (it.recommendation && REC[it.recommendation][1]) || (it.choices ? "Tap the option you want" : "Agree = do what it says");
+  const note = el("textarea", { placeholder: "Note (optional) — a note sends it back to be redone with your direction", rows: "2" });
+  note.value = a.note;
+  note.addEventListener("input", () => { a.note = note.value; updateSend(); });
+  box.append(row, el("div", { class: "hint", text: `${hint} · Drop = close it, change nothing · Backlog = park it` }), note);
+  if (saved.choice || saved.note) box.append(el("div", { class: "state", text: "Saved — applied within 30 minutes" }));
+  return box;
+}
+
+async function load() {
+  if (!key || !/^[a-z0-9-]+\.supabase\.co$/.test(host) || !pub) {
+    show("This page only works with the link in the daily Dishbase feedback email.");
+    return;
+  }
+  let data;
+  try { data = await rpc("feedback_page", { p_key: key }); }
+  catch (e) { show(`Couldn't load the items (${e.message}). Check the connection and reload.`); return; }
+  if (!data || data.error) { show(data && data.error ? data.error : "Nothing to show."); return; }
+  answers.clear();
+  const items = data.items || [];
+  const open = items.filter(i => i.status === "pending").length;
+  document.getElementById("subtitle").textContent =
+    `${open} waiting for an answer · ${items.length - open} already answered`;
+  document.getElementById("list").replaceChildren(...items.map(card));
+  document.getElementById("sendbar").hidden = open === 0;
+  if (!items.length) show("No items in this email.");
+  updateSend();
+}
+
+document.getElementById("send").addEventListener("click", async () => {
+  const b = document.getElementById("send");
+  const list = [...answers.entries()]
+    .filter(([, a]) => a.choice || a.note.trim())
+    .map(([proposal_id, a]) => ({ proposal_id, choice: a.choice, note: a.note.trim() || null }));
+  b.disabled = true; b.textContent = "Sending…";
+  try {
+    const r = await rpc("feedback_submit", { p_key: key, p_answers: list });
+    if (r.error) throw new Error(r.error);
+    await load();
+    const skipped = (r.skipped || []).length;
+    document.getElementById("list").prepend(el("div", { class: "msg",
+      text: `Saved ${r.saved} answer${r.saved === 1 ? "" : "s"}${skipped ? ` (${skipped} skipped: already answered)` : ""}. ` +
+            "They're applied within 30 minutes and you'll get an email with what happened. " +
+            "Anything you skipped comes again tomorrow." }));
+    window.scrollTo(0, 0);
+  } catch (e) {
+    b.disabled = false; updateSend();
+    alert(`Not sent: ${e.message}. Nothing was saved; try again.`);
+  }
+});
+
+load();
+</script>
+</body>
+</html>
