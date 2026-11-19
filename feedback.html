@@ -105,11 +105,18 @@ function dateText(d) {
   const x = new Date(d + "T12:00:00");
   return x.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+// An answer to send: something chosen or written that differs from what's already saved.
+function toSend(a) {
+  const note = a.note.trim();
+  return (a.choice || note) && (a.choice !== a.savedChoice || note !== a.savedNote);
+}
 function updateSend() {
-  const n = [...answers.values()].filter(a => a.choice || a.note).length;
+  const all = [...answers.values()];
+  const n = all.filter(toSend).length;
+  const anySaved = all.some(a => a.savedChoice || a.savedNote);
   const b = document.getElementById("send");
   b.disabled = n === 0;
-  b.textContent = n ? `Send ${n} answer${n === 1 ? "" : "s"}` : "Send answers";
+  b.textContent = n ? `Send ${n} answer${n === 1 ? "" : "s"}` : anySaved ? "All answers saved ✓" : "Send answers";
 }
 
 function card(it) {
@@ -153,7 +160,7 @@ function card(it) {
   }
   const saved = it.waiting_answer || {};
   const savedChoice = { agree: "approve", drop: "close" }[saved.choice] || saved.choice || null;
-  const a = { choice: savedChoice, note: saved.note || "" };
+  const a = { choice: savedChoice, note: saved.note || "", savedChoice, savedNote: (saved.note || "").trim() };
   answers.set(it.proposal_id, a);
 
   const approve = el("button", { type: "button", text: "Approve" });
@@ -209,7 +216,7 @@ async function load() {
 document.getElementById("send").addEventListener("click", async () => {
   const b = document.getElementById("send");
   const list = [...answers.entries()]
-    .filter(([, a]) => a.choice || a.note.trim())
+    .filter(([, a]) => toSend(a))
     .map(([proposal_id, a]) => ({ proposal_id, choice: a.choice, note: a.note.trim() || null }));
   b.disabled = true; b.textContent = "Sending…";
   try {
