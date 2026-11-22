@@ -64,14 +64,15 @@
 const LETTERS = "ABCDEF";
 // D-086 recommendations (older D-084 ones are shown in the same words)
 const REC = { no_change: "No change needed", fix_now: "Fix now", backlog: "Backlog", choice: "Choice",
-              duplicate: "Duplicate: close it out",
+              duplicate: "Duplicate: close it out", publish_menu: "Publish the menu",
               exists: "No change needed", fix_auto: "Fix now", fix_pc: "Backlog", fix_mac: "Backlog" };
 const APPROVE_MEANS = { no_change: "close it, nothing changes", fix_now: "make the fix", backlog: "add it to the backlog",
                         duplicate: "mark it done; the original notes this report too",
+                        publish_menu: "put this menu in the app (Close: don't use it)",
                         exists: "close it, nothing changes", fix_auto: "make the fix", fix_pc: "add it to the backlog",
                         fix_mac: "add it to the backlog" };
 const OLD_KIND = { correction: "Data fix", ignore: "No change needed", code: "Code fix", app: "App change",
-                   info: "For your decision" };
+                   info: "For your decision", menu: "New menu" };
 const STATUS = { approved: "Approved", rejected: "Closed, no change", backlog: "In the backlog", done: "Done",
                  redo: "Sent back for discussion", superseded: "Replaced by a revised one" };
 
@@ -131,7 +132,7 @@ function card(it) {
   const box = el("div", { class: "item" + (open ? "" : " done") }, meta);
 
   // A) User feedback
-  box.append(el("h3", { text: "User feedback" }),
+  box.append(el("h3", { text: it.kind === "menu" ? "Uploaded from the app" : "User feedback" }),
              el("div", { class: "said", text: it.tester_comment ? `“${it.tester_comment}”` : "(no comment)" }));
   if (it.revises && it.your_note) box.append(el("div", { class: "said mine", text: `Your note: “${it.your_note}”` }));
 
@@ -173,7 +174,7 @@ function card(it) {
   });
   const rec = it.recommendation;
   if (!["no_change", "exists", "duplicate"].includes(rec)) select.append(el("option", { value: "close", text: "Close, no change" }));
-  if (!["backlog", "fix_pc", "fix_mac"].includes(rec)) select.append(el("option", { value: "backlog", text: "Backlog" }));
+  if (!["backlog", "fix_pc", "fix_mac", "publish_menu"].includes(rec)) select.append(el("option", { value: "backlog", text: "Backlog" }));
   const show = () => {
     approve.classList.toggle("on", a.choice === "approve");
     select.value = a.choice && a.choice !== "approve" ? a.choice : "";
